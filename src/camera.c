@@ -85,7 +85,13 @@ void cam_close(Camera *c) {
   free(c);
 }
 
-static void fake_frame(Camera *c, float *g, int mirror) {
+// Where camera pixel (x, y) lands in the analysis frame.
+static inline int dest(int x, int y, int orient) {
+  const int fx = ((orient & CAM_MIRROR) != 0) != ((orient & CAM_FLIP) != 0), fy = (orient & CAM_FLIP) != 0;
+  return (fy ? CAM_H - 1 - y : y) * CAM_W + (fx ? CAM_W - 1 - x : x);
+}
+
+static void fake_frame(Camera *c, float *g, int orient) {
   const float t = c->fake_t;
   c->fake_t += 1.0f / 30;
   const float cx = 30 + 60 * (0.5f - 0.5f * cosf(t * 0.6f)), cy = 40;
@@ -96,18 +102,18 @@ static void fake_frame(Camera *c, float *g, int mirror) {
       const float bx = (x - cx) / 14, by = (y - cy) / 22, rx = (x - ax) / 5, ry = (y - ay) / 5;
       float v = room + 0.45f * expf(-(bx * bx + by * by)) + 0.4f * expf(-(rx * rx + ry * ry)) + 0.03f * sinf(t * 9);
       v += ((rand() & 255) / 255.0f - 0.5f) * 0.02f;
-      g[y * CAM_W + (mirror ? CAM_W - 1 - x : x)] = v < 0 ? 0 : v > 1 ? 1 : v;
+      g[dest(x, y, orient)] = v < 0 ? 0 : v > 1 ? 1 : v;
     }
 }
 
 // Reads whatever has arrived. Returns 1 if a new frame was written to g (CAM_W x CAM_H, 0..1).
-int cam_poll(Camera *c, float *g, int mirror, float dt) {
+int cam_poll(Camera *c, float *g, int orient, float dt) {
   if (c->mode == 2) {
     static float acc;
     acc += dt;
     if (acc < 1.0f / 30) return 0;
     acc = 0;
-    fake_frame(c, g, mirror);
+    fake_frame(c, g, orient);
     return 1;
   }
   if (c->mode != 1) return 0;
@@ -124,7 +130,7 @@ int cam_poll(Camera *c, float *g, int mirror, float dt) {
           for (int x = 0; x < CAM_W; x++) {
             const unsigned char *p = Y + 2 * y * CW + 2 * x;
             const float v = (p[0] + p[1] + p[CW] + p[CW + 1]) * (1.0f / (4 * 255));
-            g[y * CAM_W + (mirror ? CAM_W - 1 - x : x)] = v;
+            g[dest(x, y, orient)] = v;
           }
         snprintf(c->status, sizeof c->status, "camera live");
       }

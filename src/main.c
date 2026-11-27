@@ -1,11 +1,13 @@
 // Wake Zero: Wake for the M5Stack CardputerZero, the browser version's app.js as a native program. Renders
 // off-screen with OpenGL ES 2.0 on the VideoCore IV, reads each frame back and writes it to the LCD's framebuffer.
 //
-//   wake [--camera rpicam|fake|off] [--mirror] [--fb /dev/fb_lcd] [--rotate 0|90|180|270] [--swap]
-//        [--kbd DEVICE] [--fps 30] [--scene N] [--out DIR --frames N [--every K]]
+//   wake [--camera rpicam|fake|off] [--mirror] [--flip|--no-flip] [--fb /dev/fb_lcd] [--rotate 0|90|180|270]
+//        [--swap] [--kbd DEVICE] [--fps 30] [--scene N] [--stream URL [--stream-scale N]]
+//        [--out DIR --frames N [--every K]]
 //
 // Keys: space / enter / right (or /) next scene, left (or ,) previous, 1-5 pick one, P palette, A auto,
-// D fields + frame rate, M mirror, C camera on/off, Q or Esc quit.
+// D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), C camera on/off,
+// Q or Esc quit.
 #include <errno.h>
 #include <limits.h>
 #include <fcntl.h>
@@ -24,6 +26,7 @@
 
 #include "analysis.h"
 #include "camera.h"
+#include "capture.h"
 #include "font.h"
 #include "gfx.h"
 #include "scenes.h"
@@ -32,7 +35,7 @@
 #define H 170
 #define AUTO_S 90.0f
 #define FADE_S 2.5f
-#define VERSION "0.1.0"
+#define VERSION "0.2.0"
 
 typedef struct { const char *name; float a[3], b[3], c[3], d[3]; } Palette;
 static const Palette PALETTES[] = {
@@ -44,7 +47,8 @@ static const Palette PALETTES[] = {
 };
 #define NPAL ((int)(sizeof PALETTES / sizeof *PALETTES))
 
-static struct { int scene, palette, autocycle, mirror, debug; } S = { 0, 0, 1, 0, 0 };
+// flip: the CardputerZero's camera module is mounted upside down, so the picture is turned by default.
+static struct { int scene, palette, autocycle, mirror, flip, debug; } S = { 0, 0, 1, 0, 1, 0 };
 static volatile sig_atomic_t running = 1;
 static void on_signal(int s) { (void)s; running = 0; }
 
@@ -61,7 +65,9 @@ static void load_settings(void) {
   snprintf(conf_path, sizeof conf_path, "%s/.config/wake-cardputer", home ? home : "/tmp");
   FILE *f = fopen(conf_path, "r");
   if (!f) return;
-  if (fscanf(f, "%d %d %d %d", &S.scene, &S.palette, &S.autocycle, &S.mirror) != 4) S.scene = S.palette = 0;
+  const int got = fscanf(f, "%d %d %d %d %d", &S.scene, &S.palette, &S.autocycle, &S.mirror, &S.flip);
+  if (got < 4) S.scene = S.palette = 0;
+  if (got < 5) S.flip = 1;   // settings from before flip existed
   fclose(f);
   S.scene = ((S.scene % NSCENES) + NSCENES) % NSCENES;
   S.palette = ((S.palette % NPAL) + NPAL) % NPAL;
@@ -73,7 +79,7 @@ static void save_settings(void) {
   mkdir(dir, 0755);
   FILE *f = fopen(conf_path, "w");
   if (!f) return;
-  fprintf(f, "%d %d %d %d\n", S.scene, S.palette, S.autocycle, S.mirror);
+  fprintf(f, "%d %d %d %d %d\n", S.scene, S.palette, S.autocycle, S.mirror, S.flip);
   fclose(f);
 }
 
@@ -183,17 +189,24 @@ static void write_ppm(const char *dir, int n, const unsigned char *rgba) {
 
 // ------------------------------------------------------------------------------------------------ main
 static void usage(void) {
-  fprintf(stderr, "usage: wake [--camera rpicam|fake|off] [--mirror] [--fb PATH] [--rotate 0|90|180|270] [--swap]\n"
-                  "            [--kbd DEVICE] [--fps N] [--scene N] [--out DIR --frames N [--every K]]\n");
+  fprintf(stderr, "usage: wake [--camera rpicam|fake|off] [--mirror] [--flip|--no-flip] [--fb PATH] [--rotate 0|90|180|270]\n"
+                  "            [--swap] [--kbd DEVICE] [--fps N] [--scene N] [--stream URL [--stream-scale N]]\n"
+                  "            [--out DIR --frames N [--every K]]\n"
+                  "  --stream udp://<computer>:5000  live H.264 (MPEG-TS) for VLC, OBS, TouchDesigner, ...\n");
 }
 
 int main(int argc, char **argv) {
   const char *cam_mode = "rpicam", *fb_path = "/dev/fb_lcd", *kbd_path = NULL, *out_dir = NULL;
-  int rotate = -1, swap = 0, fps = 30, frames_max = 0, every = 1, scene_arg = -1, mirror_arg = -1;
+  const char *stream_url = NULL;
+  int rotate = -1, swap = 0, fps = 30, frames_max = 0, every = 1, scene_arg = -1, mirror_arg = -1, flip_arg = -1, stream_scale = 1;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
     if (!strcmp(a, "--camera") && v) cam_mode = argv[++i];
     else if (!strcmp(a, "--mirror")) mirror_arg = 1;
+    else if (!strcmp(a, "--flip")) flip_arg = 1;
+    else if (!strcmp(a, "--no-flip")) flip_arg = 0;
+    else if (!strcmp(a, "--stream") && v) stream_url = argv[++i];
+    else if (!strcmp(a, "--stream-scale") && v) stream_scale = atoi(argv[++i]);
     else if (!strcmp(a, "--fb") && v) fb_path = argv[++i];
     else if (!strcmp(a, "--rotate") && v) rotate = atoi(argv[++i]);
     else if (!strcmp(a, "--swap")) swap = 1;
@@ -216,6 +229,7 @@ int main(int argc, char **argv) {
   load_settings();
   if (scene_arg >= 0) S.scene = scene_arg % NSCENES;
   if (mirror_arg >= 0) S.mirror = mirror_arg;
+  if (flip_arg >= 0) S.flip = flip_arg;
 
   Display disp;
   const int headless = out_dir != NULL;
@@ -243,6 +257,13 @@ int main(int argc, char **argv) {
   Target outs[2] = { gfx_target(W, H, GL_LINEAR), gfx_target(W, H, GL_LINEAR) };
   Target final = gfx_target(W, H, GL_NEAREST);
   unsigned char *rgba = malloc(W * H * 4);
+  Encoder rec = { 0 }, live = { 0 };
+  int snap = 0;
+  char path[400];
+  if (stream_url) {
+    if (enc_stream(&live, W, H, fps, stream_url, stream_scale)) fprintf(stderr, "wake: streaming to %s\n", stream_url);
+    else fprintf(stderr, "wake: couldn't start ffmpeg for the stream\n");
+  }
 
   Analyzer *an = an_new(CAM_W, CAM_H);
   Camera *cam = cam_open(cam_mode);
@@ -286,6 +307,20 @@ int main(int argc, char **argv) {
           S.autocycle = !S.autocycle; save_settings();
           snprintf(flash, sizeof flash, "auto %s", S.autocycle ? "on" : "off"); flash_until = t + 2.5; break;
         case KEY_D: S.debug = !S.debug; break;
+        case KEY_F:
+          S.flip = !S.flip; save_settings();
+          snprintf(flash, sizeof flash, "flip %s", S.flip ? "on" : "off"); flash_until = t + 2.5; break;
+        case KEY_S: snap = 1; break;
+        case KEY_V:
+          if (enc_on(&rec)) {
+            enc_stop(&rec);
+            fprintf(stderr, "wake: saved %s\n", rec.what);
+            snprintf(flash, sizeof flash, "saved");
+          } else if (enc_record(&rec, W, H, fps, path, sizeof path)) {
+            fprintf(stderr, "wake: recording to %s\n", path);
+            snprintf(flash, sizeof flash, "recording");
+          } else snprintf(flash, sizeof flash, "can't record");
+          flash_until = t + 2; break;
         case KEY_M:
           S.mirror = !S.mirror; save_settings();
           snprintf(flash, sizeof flash, "mirror %s", S.mirror ? "on" : "off"); flash_until = t + 2.5; break;
@@ -308,7 +343,7 @@ int main(int argc, char **argv) {
 
     // Camera
     const double cam_now = headless ? t : wall;
-    if (cam_poll(cam, gray, S.mirror, dt)) {
+    if (cam_poll(cam, gray, (S.mirror ? CAM_MIRROR : 0) | (S.flip ? CAM_FLIP : 0), dt)) {
       an_update(an, gray, (float)(cam_now - last_cam));
       last_cam = cam_now;
       G.bg += (an_background_level(an) - G.bg) * 0.1f;
@@ -334,16 +369,36 @@ int main(int argc, char **argv) {
     composite_draw(&outs[0], &outs[1], prev >= 0 ? m : 1, S.debug, &final);
     gfx_read(&final, rgba);
 
+    // Out to files and the network: the clean picture, before any labels go on.
+    if (snap) {
+      snap = 0;
+      if (capture_snapshot(rgba, W, H, path, sizeof path)) { fprintf(stderr, "wake: snapshot %s\n", path); snprintf(flash, sizeof flash, "snapshot"); }
+      else snprintf(flash, sizeof flash, "can't save");
+      flash_until = t + 1.5;
+    }
+    if (enc_on(&rec) && !enc_frame(&rec, rgba, W, H)) { snprintf(flash, sizeof flash, "recording stopped"); flash_until = t + 2.5; }
+    if (enc_on(&live) && !enc_frame(&live, rgba, W, H)) { snprintf(flash, sizeof flash, "stream stopped"); flash_until = t + 2.5; }
+
     // Labels
     if (t < flash_until) {
       const int sc = 2;
       font_draw(rgba, W, H, (W - font_width(flash, sc)) / 2, H - 7 * sc - 10, flash, sc, 235, 235, 235);
     }
+    if (enc_on(&rec)) {   // a red dot, top right, while recording
+      for (int y = 4; y < 12; y++)
+        for (int x = W - 12; x < W - 4; x++) {
+          const int dx = 2 * x - (2 * W - 17), dy = 2 * y - 15;
+          if (dx * dx + dy * dy > 64) continue;
+          unsigned char *d = rgba + 4 * ((H - 1 - y) * W + x);
+          d[0] = 230; d[1] = 30; d[2] = 30;
+        }
+    }
     if (S.debug) {
       char line[96];
       snprintf(line, sizeof line, "%s %s %.0f FPS %.0fMS", SCENES[cur].title, PALETTES[S.palette].name, perf_fps, perf_ms);
       font_draw(rgba, W, H, 4, 4, line, 1, 235, 235, 235);
-      snprintf(line, sizeof line, "%s%s BG %.2f %s", cam_status(cam), S.mirror ? " MIRROR" : "", G.bg, VERSION);
+      snprintf(line, sizeof line, "%s%s%s%s BG %.2f %s", cam_status(cam), S.mirror ? " MIRROR" : "", S.flip ? " FLIP" : "",
+               enc_on(&live) ? " LIVE" : "", G.bg, VERSION);
       font_draw(rgba, W, H, 4, 14, line, 1, 200, 200, 200);
     }
 
@@ -371,6 +426,8 @@ int main(int argc, char **argv) {
     }
   }
 
+  enc_stop(&rec);
+  enc_stop(&live);
   if (!headless) display_clear(&disp);
   cam_close(cam);
   save_settings();

@@ -18,8 +18,27 @@ fields drive the art. It's a native port of Wake, a browser piece, to OpenGL ES 
 | 5 | **Thermal** | A heat camera. You glow in false colour and leave a warm haze that drifts up as it cools. |
 
 **Space** / **Enter** / **→** next scene · **←** previous · **1–5** pick one · **P** palette · **A** auto-cycle
-(every 90 s) · **M** mirror (for a camera facing you) · **C** camera on/off · **D** show the analysis fields and
-frame rate · **Q** or **Esc** quit. Settings are kept in `~/.config/wake-cardputer`.
+(every 90 s) · **F** flip the camera 180° (on by default: the CardputerZero's camera is mounted upside down) ·
+**M** mirror (for a camera facing you) · **S** snapshot · **V** start/stop recording · **C** camera on/off ·
+**D** show the analysis fields and frame rate · **Q** or **Esc** quit. Settings are kept in
+`~/.config/wake-cardputer`.
+
+## Snapshots, recordings and live streams
+
+Everything goes through `ffmpeg` (already on the CardputerZero image) and carries the clean picture, without the
+on-screen labels.
+
+- **S** saves a PNG, scaled up 4x with hard pixel edges (1280x680), to `~/Pictures/wake/`.
+- **V** records H.264 MP4 at the screen's native 320x170 to `~/Videos/wake/` (a red dot shows while it records).
+  To scale one up crisply on your computer:
+  `ffmpeg -i wake.mp4 -vf scale=iw*4:ih*4:flags=neighbor -c:v libx264 -crf 16 wake-4x.mp4`
+- **`--stream udp://<your computer>:5000`** sends a live H.264 (MPEG-TS) stream: open `udp://@:5000` in VLC,
+  add it to OBS as a Media Source (untick *Local File*, input `udp://@:5000`), or use TouchDesigner's
+  *Video Stream In*. `--stream-scale 2` enlarges it on the device first (more CPU). The camera faces away from
+  the screen, so this is also how you watch yourself: point it at you and watch the stream.
+
+To stream whenever it starts from the launcher, add the option to `Exec=` in
+`/usr/share/APPLaunch/applications/wake.desktop`.
 
 ## Install
 

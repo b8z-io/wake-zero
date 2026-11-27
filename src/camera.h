@@ -5,7 +5,10 @@
 
 typedef struct Camera Camera;
 Camera *cam_open(const char *mode);   // "rpicam", "fake" or "off"
-int cam_poll(Camera *c, float *gray, int mirror, float dt);
+// orient: CAM_MIRROR flips left-right (a camera facing you), CAM_FLIP turns the picture 180 degrees.
+#define CAM_MIRROR 1
+#define CAM_FLIP 2
+int cam_poll(Camera *c, float *gray, int orient, float dt);
 int cam_live(const Camera *c);
 const char *cam_status(const Camera *c);
 void cam_close(Camera *c);
