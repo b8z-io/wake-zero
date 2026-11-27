@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Wake
+Comment=Abstract art from the camera
+Exec=/usr/share/APPLaunch/bin/wake
+Terminal=false
+Icon=share/images/wake_100.png
+Type=Application

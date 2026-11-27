@@ -1,0 +1,65 @@
+# Checks the analysis against the JavaScript and every shader on desktop Mesa, builds for arm64 on Debian trixie
+# (like the CardputerZero's OS) and publishes the "latest" release that package/deploy.sh installs.
+name: build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: Check the C analysis against the JavaScript
+        run: |
+          pip install --quiet numpy
+          tests/parity.sh
+
+      - name: Check every shader compiles and renders (desktop Mesa, OpenGL ES 2)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libegl-dev libgles-dev libgbm-dev libegl-mesa0
+          make
+          for s in 0 1 2 3 4; do
+            mkdir -p /tmp/frames/$s
+            LIBGL_ALWAYS_SOFTWARE=1 ./wake --camera fake --scene $s --out /tmp/frames/$s --frames 60 --every 59
+          done
+          ls -R /tmp/frames
+          make clean
+
+      - uses: docker/setup-qemu-action@v3
+        with: { platforms: arm64 }
+
+      - name: Build for arm64 on Debian trixie
+        run: |
+          docker run --rm --platform linux/arm64 -v "$PWD:/w" -w /w debian:trixie sh -c '
+            apt-get update -q && apt-get install -y -q --no-install-recommends gcc make libc6-dev libegl-dev libgles-dev libgbm-dev &&
+            make CFLAGS="-O2 -mcpu=cortex-a53 -Wall" && ls -la wake'
+
+      - name: Package
+        run: |
+          mkdir -p dist/wake-zero
+          cp wake package/* dist/wake-zero/
+          tar -czf dist/wake-zero.tar.gz -C dist/wake-zero .
+          echo "Built from ${GITHUB_SHA::7}. Install on the device: see the README." > dist/NOTES.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wake-zero
+          path: dist/wake-zero.tar.gz
+
+      - name: Publish the latest release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest dist/wake-zero.tar.gz --target "$GITHUB_SHA" \
+            --title "Wake Zero (latest build)" --notes-file dist/NOTES.md
