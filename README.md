@@ -49,7 +49,9 @@ labels) at 640x340, 2x with hard pixel edges, at the frame rate Wake is running.
 it's on, and **D** shows how many receivers are watching. Press **L** again to stop. `--ndi` starts with it on.
 
 The camera faces away from the screen, so this is also how you watch yourself: point it at you and watch on your
-computer. The device and the computer must be on the same network (NDI finds sources with mDNS).
+computer. The device and the computer must be on the same network. NDI finds sources with mDNS, which office and
+venue networks often block: if Wake Zero doesn't appear in the list, add the CardputerZero's IP address in **NDI
+Access Manager** (*Remote Sources*) on the receiving computer and it connects directly.
 
 NDI needs NDI's own library, which isn't bundled: it's under the NDI SDK licence. The installer offers to fetch it
 from NDI for you, or run `sudo ./install-ndi.sh` from the unpacked folder later. If L says *NDI not installed*,
