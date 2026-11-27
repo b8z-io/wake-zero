@@ -51,14 +51,17 @@ static int start(Encoder *e, int w, int h, int fps, const char *output_args) {
   return e->pipe != NULL;
 }
 
+// Fragmented MP4 (a fragment a second), so a recording cut off by a kill, a closed SSH session or a flat
+// battery still plays up to the moment it stopped: a plain MP4 only gets its index at the very end.
 int enc_record(Encoder *e, int w, int h, int fps, char *path_out, size_t n) {
   char dir[300], ts[32], args[800];
   dir_for(dir, sizeof dir, "Videos");
   stamp(ts, sizeof ts);
   snprintf(path_out, n, "%s/wake-%s.mp4", dir, ts);
   snprintf(args, sizeof args,
-           "-vf vflip -c:v libx264 -preset veryfast -crf 16 -pix_fmt yuv420p -movflags +faststart '%s' >/dev/null 2>&1",
-           path_out);
+           "-vf vflip -c:v libx264 -preset veryfast -crf 16 -g %d -pix_fmt yuv420p "
+           "-movflags +frag_keyframe+empty_moov+default_base_moof '%s' >/dev/null 2>&1",
+           fps, path_out);
   snprintf(e->what, sizeof e->what, "%s", path_out);
   return start(e, w, h, fps, args);
 }
