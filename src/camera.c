@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -49,9 +50,13 @@ static int start_rpicam(Camera *c) {
   pid_t pid = fork();
   if (pid < 0) { close(p[0]); close(p[1]); return 0; }
   if (pid == 0) {
+    // Die with Wake, however it ends: the launcher kills apps outright when Esc is held, and an orphaned
+    // rpicam-vid would keep the camera busy for the next one.
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
+    if (getppid() == 1) _exit(1);
     dup2(p[1], 1);
-    int devnull = open("/dev/null", O_WRONLY);
-    if (devnull >= 0) dup2(devnull, 2);
+    int log = open("/tmp/wake-camera.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);   // rpicam-vid's own messages
+    if (log >= 0) dup2(log, 2);
     close(p[0]); close(p[1]);
     execlp(exe, exe, "-t", "0", "-n", "--codec", "yuv420", "--width", "256", "--height", "144",
            "--framerate", "30", "--flush", "-o", "-", (char *)NULL);
@@ -137,7 +142,7 @@ int cam_poll(Camera *c, float *g, int orient, float dt) {
       continue;
     }
     if (r == 0 || (r < 0 && errno != EAGAIN && errno != EINTR)) {   // rpicam-vid has gone
-      snprintf(c->status, sizeof c->status, "camera stopped (is it in use?)");
+      snprintf(c->status, sizeof c->status, "camera stopped: see /tmp/wake-camera.log");
       close(c->fd); c->fd = -1;
       if (c->pid > 0) { waitpid(c->pid, NULL, WNOHANG); c->pid = 0; }
       c->mode = 0;
