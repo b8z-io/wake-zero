@@ -9,8 +9,8 @@
 // records the whole tour as one MP4. Made for docs and posts.
 //
 // Keys: space / enter / right (or /) next scene, left (or ,) previous, 1-6 pick one, P palette, A auto,
-// D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), C camera on/off,
-// Q or Esc quit.
+// D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), L stream on/off
+// (to the last --stream address), C camera on/off, Q or Esc quit.
 #include <errno.h>
 #include <limits.h>
 #include <fcntl.h>
@@ -38,7 +38,7 @@
 #define H 170
 #define AUTO_S 90.0f
 #define FADE_S 2.5f
-#define VERSION "0.4.1"
+#define VERSION "0.5.0"
 
 typedef struct { const char *name; float a[3], b[3], c[3], d[3]; } Palette;
 static const Palette PALETTES[] = {
@@ -63,6 +63,35 @@ static double now_s(void) {
 
 // ------------------------------------------------------------------------------------------------ settings
 static char conf_path[512];
+
+// The last stream address and scale, so L can stream again without the command line.
+static void stream_conf(char *path, size_t n) {
+  const char *home = getenv("HOME");
+  snprintf(path, n, "%s/.config/wake-stream", home ? home : "/tmp");
+}
+static int load_stream(char *url, size_t n, int *scale) {
+  char p[512];
+  stream_conf(p, sizeof p);
+  FILE *f = fopen(p, "r");
+  if (!f) return 0;
+  char fmt[32];
+  snprintf(fmt, sizeof fmt, "%%%zus %%d", n - 1);
+  const int got = fscanf(f, fmt, url, scale);
+  fclose(f);
+  if (got < 2) *scale = 1;
+  return got >= 1;
+}
+static void save_stream(const char *url, int scale) {
+  char p[512], dir[512];
+  const char *home = getenv("HOME");
+  snprintf(dir, sizeof dir, "%s/.config", home ? home : "/tmp");
+  mkdir(dir, 0755);
+  stream_conf(p, sizeof p);
+  FILE *f = fopen(p, "w");
+  if (!f) return;
+  fprintf(f, "%s %d\n", url, scale);
+  fclose(f);
+}
 static int no_save;
 static void load_settings(void) {
   const char *home = getenv("HOME");
@@ -275,6 +304,11 @@ int main(int argc, char **argv) {
   Encoder rec = { 0 }, live = { 0 };
   int snap = 0;
   char path[400];
+  // L toggles the stream: to --stream's address, or else the last one used.
+  char live_url[400] = "";
+  int live_scale = stream_scale;
+  if (stream_url) { snprintf(live_url, sizeof live_url, "%s", stream_url); save_stream(live_url, live_scale); }
+  else load_stream(live_url, sizeof live_url, &live_scale);
   if (stream_url) {
     if (enc_stream(&live, W, H, fps, stream_url, stream_scale)) fprintf(stderr, "wake: streaming to %s\n", stream_url);
     else fprintf(stderr, "wake: couldn't start ffmpeg for the stream\n");
@@ -331,6 +365,19 @@ int main(int argc, char **argv) {
           S.flip = !S.flip; save_settings();
           snprintf(flash, sizeof flash, "flip %s", S.flip ? "on" : "off"); flash_until = t + 2.5; break;
         case KEY_S: snap = 1; break;
+        case KEY_L:
+          if (enc_on(&live)) {
+            enc_stop(&live);
+            fprintf(stderr, "wake: stream stopped\n");
+            snprintf(flash, sizeof flash, "stream off");
+          } else if (!live_url[0]) {
+            snprintf(flash, sizeof flash, "no stream address");   // run once with --stream udp://<computer>:5000
+            fprintf(stderr, "wake: no stream address yet: run once with --stream udp://<computer>:5000\n");
+          } else if (enc_stream(&live, W, H, fps, live_url, live_scale)) {
+            fprintf(stderr, "wake: streaming to %s\n", live_url);
+            snprintf(flash, sizeof flash, "streaming");
+          } else snprintf(flash, sizeof flash, "can't stream");
+          flash_until = t + 2; break;
         case KEY_V:
           if (enc_on(&rec)) {
             enc_stop(&rec);
@@ -411,6 +458,7 @@ int main(int argc, char **argv) {
       const int sc = 2;
       font_draw(rgba, W, H, (W - font_width(flash, sc)) / 2, H - 7 * sc - 10, flash, sc, 235, 235, 235);
     }
+    if (enc_on(&live)) font_draw(rgba, W, H, W - 12 - (enc_on(&rec) ? 10 : 0) - font_width("LIVE", 1), 5, "LIVE", 1, 235, 40, 40);
     if (enc_on(&rec)) {   // a red dot, top right, while recording
       for (int y = 4; y < 12; y++)
         for (int x = W - 12; x < W - 4; x++) {

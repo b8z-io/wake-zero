@@ -35,7 +35,8 @@ waving its arms) in place of a person; on the device the input is you.*
 
 **Space** / **Enter** / **→** next scene · **←** previous · **1–6** pick one · **P** palette · **A** auto-cycle
 (every 90 s) · **F** flip the camera 180° (on by default: the CardputerZero's camera is mounted upside down) ·
-**M** mirror (for a camera facing you) · **S** snapshot · **V** start/stop recording · **C** camera on/off ·
+**M** mirror (for a camera facing you) · **S** snapshot · **V** start/stop recording · **L** live stream on/off ·
+**C** camera on/off ·
 **D** show the analysis fields and frame rate · **Q** or **Esc** quit. Settings are kept in
 `~/.config/wake-cardputer`.
 
@@ -56,6 +57,10 @@ on-screen labels.
 **A tour for docs and posts:** `wake --tour 12 --record` shows every scene once for 12 seconds, records the whole
 run as one MP4, saves a PNG of each scene and quits (your saved settings are left alone). Move about in front of
 the camera while it runs: the art is made from movement.
+
+**L** turns the stream on and off from the device. It streams to the last `--stream` address used (kept in
+`~/.config/wake-stream`), so run it once with `--stream udp://<your computer>:5000` and from then on L works from
+the launcher too. A red LIVE shows in the corner while it's streaming.
 
 To stream whenever it starts from the launcher, add the option to `Exec=` in
 `/usr/share/APPLaunch/applications/wake.desktop`.
