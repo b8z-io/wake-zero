@@ -1,0 +1,65 @@
+# Builds M5Stack's CardputerZero camera app (github.com/CardputerZero/Camera, MIT) from its latest source against
+# Raspberry Pi's libcamera 0.8, because the newest released package (1.0.3) needs libcamera 0.7 and current
+# CardputerZero images have 0.8. Run it from the Actions tab; the .deb lands in the "m5-camera" release.
+name: m5-camera
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/m5-camera.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container: debian:trixie
+    steps:
+      - name: Raspberry Pi apt repository (for libcamera 0.8)
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates curl gnupg
+          curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key | gpg --dearmor -o /usr/share/keyrings/raspberrypi.gpg
+          echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg] http://archive.raspberrypi.com/debian trixie main" > /etc/apt/sources.list.d/raspi.list
+          apt-get update -q
+
+      - name: Build dependencies
+        run: |
+          apt-get install -y -q --no-install-recommends build-essential cmake ninja-build git pkg-config dpkg-dev file \
+            libfreetype-dev libpng-dev libjpeg-dev zlib1g-dev libcamera-dev libfmt-dev libcjson-dev libpulse0
+          apt-get install -y -q --no-install-recommends libminiaudio-dev || echo "no libminiaudio-dev: using the header"
+          dpkg -l libcamera-dev | tail -1
+
+      - name: Build and package
+        run: |
+          git clone --depth 1 https://github.com/CardputerZero/Camera /src
+          cd /src
+          git log -1 --format='source: %h %ci %s' | tee /tmp/notes.md
+          if ! dpkg -s libminiaudio-dev >/dev/null 2>&1; then
+            mkdir -p .cache/sdk_bsp-src/usr/include
+            curl -fsSL https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h -o .cache/sdk_bsp-src/usr/include/miniaudio.h
+          fi
+          PRESET=cp0-native bash package_deb.sh
+          deb=$(find build -name 'Camera_*_arm64.deb' | head -1)
+          test -n "$deb"
+          dpkg-deb -I "$deb" | tee -a /tmp/notes.md
+          mkdir -p /out && cp "$deb" /out/ && cp /tmp/notes.md /out/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: m5-camera
+          path: /out/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v7
+        with: { name: m5-camera, path: out }
+      - name: Publish the m5-camera release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete m5-camera -R "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create m5-camera out/*.deb -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "M5 CardputerZero camera app, built for libcamera 0.8" --notes-file out/notes.md
