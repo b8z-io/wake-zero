@@ -35,35 +35,42 @@ waving its arms) in place of a person; on the device the input is you.*
 
 **Space** / **Enter** / **→** next scene · **←** previous · **1–6** pick one · **P** palette · **A** auto-cycle
 (every 90 s) · **F** flip the camera 180° (on by default: the CardputerZero's camera is mounted upside down) ·
-**M** mirror (for a camera facing you) · **S** snapshot · **V** start/stop recording · **L** live stream on/off ·
+**M** mirror (for a camera facing you) · **S** snapshot · **V** start/stop recording · **L** NDI output on/off ·
 **C** camera on/off ·
 **D** show the analysis fields and frame rate · **Q** or **Esc** quit. Settings are kept in
 `~/.config/wake-cardputer`.
 
-## Snapshots, recordings and live streams
+## NDI® output
 
-Everything goes through `ffmpeg` (already on the CardputerZero image) and carries the clean picture, without the
-on-screen labels.
+Press **L** and Wake appears on your network as an NDI source called **Wake Zero**: pick it in OBS (with the
+[DistroAV](https://github.com/DistroAV/DistroAV) plugin), NDI Studio Monitor, TouchDesigner, vMix, Resolume or any
+other NDI receiver. No addresses to type: NDI sources find each other. It sends the clean picture (no on-screen
+labels) at 640x340, 2x with hard pixel edges, at the frame rate Wake is running. A red NDI shows in the corner while
+it's on, and **D** shows how many receivers are watching. Press **L** again to stop. `--ndi` starts with it on.
+
+The camera faces away from the screen, so this is also how you watch yourself: point it at you and watch on your
+computer. The device and the computer must be on the same network (NDI finds sources with mDNS).
+
+NDI needs NDI's own library, which isn't bundled: it's under the NDI SDK licence. The installer offers to fetch it
+from NDI for you, or run `sudo ./install-ndi.sh` from the unpacked folder later. If L says *NDI not installed*,
+that's the step to run.
+
+NDI® is a registered trademark of Vizrt NDI AB. See [ndi.video](https://ndi.video/).
+
+## Snapshots and recordings
+
+Both go through `ffmpeg` (already on the CardputerZero image) and carry the clean picture.
 
 - **S** saves a PNG, scaled up 4x with hard pixel edges (1280x680), to `~/Pictures/wake/`.
 - **V** records H.264 MP4 at the screen's native 320x170 to `~/Videos/wake/` (a red dot shows while it records).
   To scale one up crisply on your computer:
   `ffmpeg -i wake.mp4 -vf scale=iw*4:ih*4:flags=neighbor -c:v libx264 -crf 16 wake-4x.mp4`
-- **`--stream udp://<your computer>:5000`** sends a live H.264 (MPEG-TS) stream: open `udp://@:5000` in VLC,
-  add it to OBS as a Media Source (untick *Local File*, input `udp://@:5000`), or use TouchDesigner's
-  *Video Stream In*. `--stream-scale 2` enlarges it on the device first (more CPU). The camera faces away from
-  the screen, so this is also how you watch yourself: point it at you and watch the stream.
 
 **A tour for docs and posts:** `wake --tour 12 --record` shows every scene once for 12 seconds, records the whole
 run as one MP4, saves a PNG of each scene and quits (your saved settings are left alone). Move about in front of
 the camera while it runs: the art is made from movement.
 
-**L** turns the stream on and off from the device. It streams to the last `--stream` address used (kept in
-`~/.config/wake-stream`), so run it once with `--stream udp://<your computer>:5000` and from then on L works from
-the launcher too. A red LIVE shows in the corner while it's streaming.
-
-To stream whenever it starts from the launcher, add the option to `Exec=` in
-`/usr/share/APPLaunch/applications/wake.desktop`.
+Without NDI, `--stream udp://<computer>:5000` sends plain H.264 over UDP instead (open `udp://@:5000` in VLC).
 
 ## Install
 

@@ -28,6 +28,9 @@ jobs:
           pip install --quiet numpy
           tests/parity.sh
 
+      - name: Fetch the NDI SDK headers (not shipped; the device fetches its own library)
+        run: ./tools/fetch_ndi_sdk.sh
+
       - name: Check every shader compiles and renders (desktop Mesa, OpenGL ES 2)
         run: |
           sudo apt-get update -q

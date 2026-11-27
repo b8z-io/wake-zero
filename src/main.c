@@ -9,8 +9,8 @@
 // records the whole tour as one MP4. Made for docs and posts.
 //
 // Keys: space / enter / right (or /) next scene, left (or ,) previous, 1-6 pick one, P palette, A auto,
-// D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), L stream on/off
-// (to the last --stream address), C camera on/off, Q or Esc quit.
+// D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), L NDI® output
+// on/off (a source called "Wake Zero" on the network), C camera on/off, Q or Esc quit.
 #include <errno.h>
 #include <limits.h>
 #include <fcntl.h>
@@ -32,13 +32,14 @@
 #include "capture.h"
 #include "font.h"
 #include "gfx.h"
+#include "ndi.h"
 #include "scenes.h"
 
 #define W 320
 #define H 170
 #define AUTO_S 90.0f
 #define FADE_S 2.5f
-#define VERSION "0.5.0"
+#define VERSION "0.6.0"
 
 typedef struct { const char *name; float a[3], b[3], c[3], d[3]; } Palette;
 static const Palette PALETTES[] = {
@@ -64,34 +65,6 @@ static double now_s(void) {
 // ------------------------------------------------------------------------------------------------ settings
 static char conf_path[512];
 
-// The last stream address and scale, so L can stream again without the command line.
-static void stream_conf(char *path, size_t n) {
-  const char *home = getenv("HOME");
-  snprintf(path, n, "%s/.config/wake-stream", home ? home : "/tmp");
-}
-static int load_stream(char *url, size_t n, int *scale) {
-  char p[512];
-  stream_conf(p, sizeof p);
-  FILE *f = fopen(p, "r");
-  if (!f) return 0;
-  char fmt[32];
-  snprintf(fmt, sizeof fmt, "%%%zus %%d", n - 1);
-  const int got = fscanf(f, fmt, url, scale);
-  fclose(f);
-  if (got < 2) *scale = 1;
-  return got >= 1;
-}
-static void save_stream(const char *url, int scale) {
-  char p[512], dir[512];
-  const char *home = getenv("HOME");
-  snprintf(dir, sizeof dir, "%s/.config", home ? home : "/tmp");
-  mkdir(dir, 0755);
-  stream_conf(p, sizeof p);
-  FILE *f = fopen(p, "w");
-  if (!f) return;
-  fprintf(f, "%s %d\n", url, scale);
-  fclose(f);
-}
 static int no_save;
 static void load_settings(void) {
   const char *home = getenv("HOME");
@@ -227,6 +200,7 @@ static void usage(void) {
                   "            [--swap] [--kbd DEVICE] [--fps N] [--scene N] [--stream URL [--stream-scale N]]\n"
                   "            [--record] [--tour SECONDS] [--out DIR --frames N [--every K]]\n"
                   "  --tour 10 --record               every scene for 10 s: one MP4 plus a PNG of each, then quit\n"
+                  "  --ndi [--ndi-scale 2]             NDI output on from the start (L toggles it)\n"
                   "  --stream udp://<computer>:5000  live H.264 (MPEG-TS) for VLC, OBS, TouchDesigner, ...\n");
 }
 
@@ -234,7 +208,7 @@ int main(int argc, char **argv) {
   const char *cam_mode = "rpicam", *fb_path = "/dev/fb_lcd", *kbd_path = NULL, *out_dir = NULL;
   const char *stream_url = NULL;
   float tour = 0;
-  int record_arg = 0;
+  int record_arg = 0, ndi_arg = 0, ndi_scale = 2;
   int rotate = -1, swap = 0, fps = 30, frames_max = 0, every = 1, scene_arg = -1, mirror_arg = -1, flip_arg = -1, stream_scale = 1;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -246,6 +220,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--stream-scale") && v) stream_scale = atoi(argv[++i]);
     else if (!strcmp(a, "--tour") && v) tour = atof(argv[++i]);
     else if (!strcmp(a, "--record")) record_arg = 1;
+    else if (!strcmp(a, "--ndi")) ndi_arg = 1;
+    else if (!strcmp(a, "--ndi-scale") && v) ndi_scale = atoi(argv[++i]);
     else if (!strcmp(a, "--fb") && v) fb_path = argv[++i];
     else if (!strcmp(a, "--rotate") && v) rotate = atoi(argv[++i]);
     else if (!strcmp(a, "--swap")) swap = 1;
@@ -304,11 +280,13 @@ int main(int argc, char **argv) {
   Encoder rec = { 0 }, live = { 0 };
   int snap = 0;
   char path[400];
-  // L toggles the stream: to --stream's address, or else the last one used.
-  char live_url[400] = "";
-  int live_scale = stream_scale;
-  if (stream_url) { snprintf(live_url, sizeof live_url, "%s", stream_url); save_stream(live_url, live_scale); }
-  else load_stream(live_url, sizeof live_url, &live_scale);
+  // NDI: L toggles it; --ndi starts with it on.
+  Ndi *ndi = NULL;
+  char ndi_err[96] = "";
+  if (ndi_arg) {
+    ndi = ndi_open("Wake Zero", ndi_err, sizeof ndi_err);
+    fprintf(stderr, ndi ? "wake: NDI source \"Wake Zero\" is on\n" : "wake: %s\n", ndi_err);
+  }
   if (stream_url) {
     if (enc_stream(&live, W, H, fps, stream_url, stream_scale)) fprintf(stderr, "wake: streaming to %s\n", stream_url);
     else fprintf(stderr, "wake: couldn't start ffmpeg for the stream\n");
@@ -366,18 +344,18 @@ int main(int argc, char **argv) {
           snprintf(flash, sizeof flash, "flip %s", S.flip ? "on" : "off"); flash_until = t + 2.5; break;
         case KEY_S: snap = 1; break;
         case KEY_L:
-          if (enc_on(&live)) {
-            enc_stop(&live);
-            fprintf(stderr, "wake: stream stopped\n");
-            snprintf(flash, sizeof flash, "stream off");
-          } else if (!live_url[0]) {
-            snprintf(flash, sizeof flash, "no stream address");   // run once with --stream udp://<computer>:5000
-            fprintf(stderr, "wake: no stream address yet: run once with --stream udp://<computer>:5000\n");
-          } else if (enc_stream(&live, W, H, fps, live_url, live_scale)) {
-            fprintf(stderr, "wake: streaming to %s\n", live_url);
-            snprintf(flash, sizeof flash, "streaming");
-          } else snprintf(flash, sizeof flash, "can't stream");
-          flash_until = t + 2; break;
+          if (ndi) {
+            ndi_close(ndi); ndi = NULL;
+            fprintf(stderr, "wake: NDI off\n");
+            snprintf(flash, sizeof flash, "NDI off");
+          } else if ((ndi = ndi_open("Wake Zero", ndi_err, sizeof ndi_err))) {
+            fprintf(stderr, "wake: NDI source \"Wake Zero\" is on\n");
+            snprintf(flash, sizeof flash, "NDI on");
+          } else {
+            fprintf(stderr, "wake: %s\n", ndi_err);
+            snprintf(flash, sizeof flash, "%s", strstr(ndi_err, "install") ? "NDI not installed" : "NDI failed");
+          }
+          flash_until = t + 2.5; break;
         case KEY_V:
           if (enc_on(&rec)) {
             enc_stop(&rec);
@@ -451,6 +429,7 @@ int main(int argc, char **argv) {
       flash_until = t + 1.5;
     }
     if (enc_on(&rec) && !enc_frame(&rec, rgba, W, H)) { snprintf(flash, sizeof flash, "recording stopped"); flash_until = t + 2.5; }
+    if (ndi) ndi_send(ndi, rgba, W, H, ndi_scale, fps);
     if (enc_on(&live) && !enc_frame(&live, rgba, W, H)) { snprintf(flash, sizeof flash, "stream stopped"); flash_until = t + 2.5; }
 
     // Labels
@@ -458,7 +437,10 @@ int main(int argc, char **argv) {
       const int sc = 2;
       font_draw(rgba, W, H, (W - font_width(flash, sc)) / 2, H - 7 * sc - 10, flash, sc, 235, 235, 235);
     }
-    if (enc_on(&live)) font_draw(rgba, W, H, W - 12 - (enc_on(&rec) ? 10 : 0) - font_width("LIVE", 1), 5, "LIVE", 1, 235, 40, 40);
+    if (ndi || enc_on(&live)) {   // a red NDI (or LIVE, for --stream) top right while it's going out
+      const char *tag = ndi ? "NDI" : "LIVE";
+      font_draw(rgba, W, H, W - 12 - (enc_on(&rec) ? 10 : 0) - font_width(tag, 1), 5, tag, 1, 235, 40, 40);
+    }
     if (enc_on(&rec)) {   // a red dot, top right, while recording
       for (int y = 4; y < 12; y++)
         for (int x = W - 12; x < W - 4; x++) {
@@ -474,6 +456,10 @@ int main(int argc, char **argv) {
       font_draw(rgba, W, H, 4, 4, line, 1, 235, 235, 235);
       snprintf(line, sizeof line, "%s%s%s%s BG %.2f %s", cam_status(cam), S.mirror ? " MIRROR" : "", S.flip ? " FLIP" : "",
                enc_on(&live) ? " LIVE" : "", G.bg, VERSION);
+      if (ndi) {
+        snprintf(line, sizeof line, "NDI WAKE ZERO  %d WATCHING", ndi_connections(ndi));
+        font_draw(rgba, W, H, 4, 24, line, 1, 200, 200, 200);
+      }
       font_draw(rgba, W, H, 4, 14, line, 1, 200, 200, 200);
     }
 
@@ -503,6 +489,7 @@ int main(int argc, char **argv) {
 
   enc_stop(&rec);
   enc_stop(&live);
+  ndi_close(ndi);
   if (!headless) display_clear(&disp);
   cam_close(cam);
   save_settings();

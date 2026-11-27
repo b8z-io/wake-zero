@@ -26,4 +26,13 @@ user=${SUDO_USER:-pi}
 for g in video render input; do
   getent group "$g" >/dev/null && ! id -nG "$user" | grep -qw "$g" && usermod -aG "$g" "$user" && echo "added $user to $g (takes effect at next login or reboot)" || true
 done
+# NDI output (L in Wake): the library comes from NDI under its own licence, so it's offered, not bundled.
+if [ ! -f "$APP/lib/ndi/libndi.so.6" ] && [ -x ./install-ndi.sh ]; then
+  if [ -t 0 ]; then
+    echo; echo "Optional: NDI output, so pressing L in Wake makes it appear as \"Wake Zero\" in OBS / NDI Monitor."
+    ./install-ndi.sh || true
+  else
+    echo "for NDI output later: sudo $(pwd)/install-ndi.sh"
+  fi
+fi
 echo "installed: Wake is in the launcher. To try it from SSH instead: $APP/bin/wake (Q or Esc quits)"

@@ -2,11 +2,16 @@
 CFLAGS ?= -O2 -Wall -Wextra -Wno-unused-parameter
 # OpenMP spreads Ink's fluid simulation over the four cores; kept apart from CFLAGS so overriding those keeps it.
 OMP = -fopenmp
-LDLIBS = -lEGL -lGLESv2 -lgbm -lm
-SRC = src/main.c src/gfx.c src/scenes.c src/analysis.c src/camera.c src/font.c src/capture.c src/ink.c
+LDLIBS = -lEGL -lGLESv2 -lgbm -lm -ldl
+# NDI®: with the SDK's headers in ndi-sdk/ (tools/fetch_ndi_sdk.sh), NDI output is built in. The library itself is
+# only loaded at run time, from wherever package/install-ndi.sh put it.
+ifneq ($(wildcard ndi-sdk/include/Processing.NDI.Lib.h),)
+NDI = -DHAVE_NDI -Indi-sdk/include
+endif
+SRC = src/main.c src/gfx.c src/scenes.c src/analysis.c src/camera.c src/font.c src/capture.c src/ink.c src/ndi.c
 
 wake: $(SRC) src/*.h
-	$(CC) $(CFLAGS) $(OMP) -o $@ $(SRC) $(LDLIBS) $(OMP)
+	$(CC) $(CFLAGS) $(OMP) $(NDI) -o $@ $(SRC) $(LDLIBS) $(OMP)
 
 clean:
 	rm -f wake
