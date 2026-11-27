@@ -11,13 +11,14 @@ fields drive the art. It's a native port of Wake, a browser piece, to OpenGL ES 
 
 | Key | Scene | |
 |---|---|---|
-| 1 | **Strata** | A creeping contour map. Whoever is in view raises the terrain; movement heats the lines. |
-| 2 | **Lattice** | A hex field of dots that swell, shove and light up with movement. |
-| 3 | **Ripple** | A water surface. Movement presses in and leaves a wake; raindrops fall; caustics shimmer. |
-| 4 | **Echo** | Video feedback. Movement pours light into an endless spiralling tunnel. |
-| 5 | **Thermal** | A heat camera. You glow in false colour and leave a warm haze that drifts up as it cools. |
+| 1 | **Ink** | A fluid simulation. Movement drags the fluid along and pours in ink, coloured by its direction. |
+| 2 | **Strata** | A creeping contour map. Whoever is in view raises the terrain; movement heats the lines. |
+| 3 | **Lattice** | A hex field of dots that swell, shove and light up with movement. |
+| 4 | **Ripple** | A water surface. Movement presses in and leaves a wake; raindrops fall; caustics shimmer. |
+| 5 | **Echo** | Video feedback. Movement pours light into an endless spiralling tunnel. |
+| 6 | **Thermal** | A heat camera. You glow in false colour and leave a warm haze that drifts up as it cools. |
 
-**Space** / **Enter** / **→** next scene · **←** previous · **1–5** pick one · **P** palette · **A** auto-cycle
+**Space** / **Enter** / **→** next scene · **←** previous · **1–6** pick one · **P** palette · **A** auto-cycle
 (every 90 s) · **F** flip the camera 180° (on by default: the CardputerZero's camera is mounted upside down) ·
 **M** mirror (for a camera facing you) · **S** snapshot · **V** start/stop recording · **C** camera on/off ·
 **D** show the analysis fields and frame rate · **Q** or **Esc** quit. Settings are kept in
@@ -52,7 +53,7 @@ sudo /tmp/wake-zero/install.sh
 
 Or from your computer over SSH: `package/deploy.sh pi@<device address>`.
 
-The installer adds any missing libraries (`libegl1 libgles2 libgbm1 libegl-mesa0 rpicam-apps-lite`), puts Wake in
+The installer adds any missing libraries (`libegl1 libgles2 libgbm1 libegl-mesa0 libgomp1 rpicam-apps-lite`), puts Wake in
 the launcher and makes sure the launcher's user is in the `video`, `render` and `input` groups. It needs the
 camera working (`rpicam-hello --list-cameras` should list the imx219); without one it still runs, on its own.
 
@@ -72,7 +73,10 @@ If the picture is sideways, add `--rotate 90` (or `270`) to `Exec=` in
   - feedback (Echo, Thermal) uses dithered rounding, so trails fade all the way out instead of sticking;
   - Ripple packs each wave height into two channels as 16-bit fixed point and blends between texels itself,
     since texture filtering rounds to 8 bits;
-  - the camera's brightness field goes up with 16 bits the same way, so contour lines stay smooth.
+  - the camera's brightness field goes up with 16 bits the same way, so contour lines stay smooth;
+  - Ink's fluid (stable fluids with vorticity, as in the browser) needs floating-point render targets, so it runs
+    on the CPU instead, across all four cores with OpenMP (`src/ink.c`): 128x68 for the velocity and pressure,
+    the full screen for the ink. The GPU only shades the result.
 
 ## Building and testing
 

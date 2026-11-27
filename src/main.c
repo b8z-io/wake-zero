@@ -5,7 +5,7 @@
 //        [--swap] [--kbd DEVICE] [--fps 30] [--scene N] [--stream URL [--stream-scale N]]
 //        [--out DIR --frames N [--every K]]
 //
-// Keys: space / enter / right (or /) next scene, left (or ,) previous, 1-5 pick one, P palette, A auto,
+// Keys: space / enter / right (or /) next scene, left (or ,) previous, 1-6 pick one, P palette, A auto,
 // D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), C camera on/off,
 // Q or Esc quit.
 #include <errno.h>
@@ -35,7 +35,7 @@
 #define H 170
 #define AUTO_S 90.0f
 #define FADE_S 2.5f
-#define VERSION "0.2.0"
+#define VERSION "0.3.0"
 
 typedef struct { const char *name; float a[3], b[3], c[3], d[3]; } Palette;
 static const Palette PALETTES[] = {

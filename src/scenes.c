@@ -9,6 +9,7 @@
 #include <string.h>
 
 static int W, H;
+int SCREEN_W, SCREEN_H;
 static float frand(void) { return (float)rand() / RAND_MAX; }
 
 // ---------------------------------------------------------------------------------------------------- Strata
@@ -327,7 +328,8 @@ static void thermal_draw(const Target *out) {
 }
 
 // ---------------------------------------------------------------------------------------------------- list
-Scene SCENES[] = {
+Scene SCENES[] = {   // the browser's order, for the scenes ported so far
+  { "Ink", ink_init, ink_step, ink_draw },
   { "Strata", strata_init, strata_step, strata_draw },
   { "Lattice", lattice_init, lattice_step, lattice_draw },
   { "Ripple", ripple_init, ripple_step, ripple_draw },
@@ -337,7 +339,7 @@ Scene SCENES[] = {
 const int NSCENES = sizeof SCENES / sizeof *SCENES;
 
 void scenes_init(int w, int h) {
-  W = w; H = h;
+  W = w; H = h; SCREEN_W = w; SCREEN_H = h;
   for (int i = 0; i < NSCENES; i++) SCENES[i].init();
 }
 

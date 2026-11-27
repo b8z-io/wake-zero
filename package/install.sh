@@ -8,7 +8,7 @@ APP=/usr/share/APPLaunch
 
 # Libraries: OpenGL ES through Mesa (VideoCore IV), and rpicam-vid for the camera.
 need=""
-for p in libegl1 libgles2 libgbm1 libegl-mesa0 rpicam-apps-lite; do
+for p in libegl1 libgles2 libgbm1 libegl-mesa0 libgomp1 rpicam-apps-lite; do
   dpkg -s "$p" >/dev/null 2>&1 || need="$need $p"
 done
 if [ -n "$need" ]; then

@@ -33,7 +33,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q libegl-dev libgles-dev libgbm-dev libegl-mesa0
           make
-          for s in 0 1 2 3 4; do
+          for s in 0 1 2 3 4 5; do
             mkdir -p /tmp/frames/$s
             LIBGL_ALWAYS_SOFTWARE=1 ./wake --camera fake --scene $s --out /tmp/frames/$s --frames 60 --every 59
           done
