@@ -13,8 +13,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
 
       - name: Check the C analysis against the JavaScript
@@ -34,7 +34,7 @@ jobs:
           ls -R /tmp/frames
           make clean
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
         with: { platforms: arm64 }
 
       - name: Build for arm64 on Debian trixie
@@ -50,7 +50,7 @@ jobs:
           tar -czf dist/wake-zero.tar.gz -C dist/wake-zero .
           echo "Built from ${GITHUB_SHA::7}. Install on the device: see the README." > dist/NOTES.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wake-zero
           path: dist/wake-zero.tar.gz
