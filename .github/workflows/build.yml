@@ -3,11 +3,17 @@
 name: build
 on:
   push:
+    paths-ignore: [".github/workflows/m5-camera.yml"]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# One build at a time per branch: overlapping runs would race to replace the "latest" release.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
