@@ -22,12 +22,17 @@ struct Ndi {
 static void *load(char *err, size_t n) {
   const char *env = getenv("WAKE_NDI_LIB");
   const char *paths[] = { env, "/usr/share/APPLaunch/lib/ndi/libndi.so.6", "libndi.so.6" };
+  char why[200] = "";
   for (size_t i = 0; i < sizeof paths / sizeof *paths; i++) {
     if (!paths[i]) continue;
     void *h = dlopen(paths[i], RTLD_NOW | RTLD_LOCAL);
     if (h) return h;
+    // Keep the first real reason (the file is there but won't load) over "no such file" for the fallbacks.
+    const char *e = dlerror();
+    if (e && (!why[0] || strstr(why, "No such file"))) snprintf(why, sizeof why, "%s", e);
   }
-  snprintf(err, n, "NDI not installed (sudo ./install-ndi.sh)");
+  if (!why[0] || strstr(why, "No such file")) snprintf(err, n, "NDI not installed (sudo ./install-ndi.sh)");
+  else snprintf(err, n, "NDI won't load: %s", why);
   return NULL;
 }
 

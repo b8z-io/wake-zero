@@ -13,7 +13,9 @@ if [ "$1" != "--yes" ]; then
   read -r ok
   case "$ok" in y|Y|yes|YES) ;; *) echo "not installed"; exit 0 ;; esac
 fi
-apt-get install -y -q --no-install-recommends libavahi-client3 avahi-daemon >/dev/null
+if ! dpkg -s libavahi-client3 avahi-daemon >/dev/null 2>&1; then
+  apt-get update -q && apt-get install -y -q --no-install-recommends libavahi-client3 avahi-daemon
+fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 echo "downloading the NDI SDK..."
@@ -28,4 +30,5 @@ install -d "$DEST"
 install -m 644 "$SDK/lib/aarch64-rpi4-linux-gnueabi/libndi.so.6."* "$DEST/libndi.so.6"
 install -m 644 "$SDK/NDI SDK License Agreement.txt" "$SDK/Version.txt" "$DEST/"
 systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+ls -la "$DEST/libndi.so.6"
 echo "NDI $(cat "$DEST/Version.txt") installed in $DEST. In Wake Zero, press L: 'Wake Zero' appears as an NDI source."

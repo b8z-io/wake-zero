@@ -30,7 +30,7 @@ done
 if [ ! -f "$APP/lib/ndi/libndi.so.6" ] && [ -x ./install-ndi.sh ]; then
   if [ -t 0 ]; then
     echo; echo "Optional: NDI output, so pressing L in Wake makes it appear as \"Wake Zero\" in OBS / NDI Monitor."
-    ./install-ndi.sh || true
+    ./install-ndi.sh || echo "NDI wasn't installed (see above). Try again later with: sudo $(pwd)/install-ndi.sh"
   else
     echo "for NDI output later: sudo $(pwd)/install-ndi.sh"
   fi

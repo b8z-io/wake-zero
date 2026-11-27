@@ -39,7 +39,7 @@
 #define H 170
 #define AUTO_S 90.0f
 #define FADE_S 2.5f
-#define VERSION "0.6.0"
+#define VERSION "0.6.1"
 
 typedef struct { const char *name; float a[3], b[3], c[3], d[3]; } Palette;
 static const Palette PALETTES[] = {
@@ -353,7 +353,7 @@ int main(int argc, char **argv) {
             snprintf(flash, sizeof flash, "NDI on");
           } else {
             fprintf(stderr, "wake: %s\n", ndi_err);
-            snprintf(flash, sizeof flash, "%s", strstr(ndi_err, "install") ? "NDI not installed" : "NDI failed");
+            snprintf(flash, sizeof flash, "%s", strstr(ndi_err, "not installed") ? "NDI not installed" : strstr(ndi_err, "load") ? "NDI won't load (see log)" : "NDI failed");
           }
           flash_until = t + 2.5; break;
         case KEY_V:
