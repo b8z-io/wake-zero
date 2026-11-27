@@ -33,7 +33,7 @@ jobs:
       - name: Build dependencies
         run: |
           apt-get install -y -q --no-install-recommends build-essential cmake ninja-build git pkg-config dpkg-dev file \
-            libfreetype-dev libpng-dev libjpeg-dev zlib1g-dev libcamera-dev libfmt-dev libcjson-dev libpulse0
+            libfreetype-dev libpng-dev libjpeg-dev zlib1g-dev libcamera-dev libfmt-dev libcjson-dev libv4l-dev libpulse0
           apt-get install -y -q --no-install-recommends libminiaudio-dev || echo "no libminiaudio-dev: using the header"
           dpkg -l libcamera-dev | tail -1
 
@@ -43,10 +43,11 @@ jobs:
           cd /src
           git log -1 --format='source: %h %ci %s' | tee /tmp/notes.md
           if ! dpkg -s libminiaudio-dev >/dev/null 2>&1; then
-            mkdir -p .cache/sdk_bsp-src/usr/include
-            curl -fsSL https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h -o .cache/sdk_bsp-src/usr/include/miniaudio.h
+            curl -fsSL https://raw.githubusercontent.com/mackron/miniaudio/0.11.21/miniaudio.h -o /usr/include/miniaudio.h
           fi
-          PRESET=cp0-native bash package_deb.sh
+          # Building on arm64 itself: the "SDK sysroot" is this system. Debian keeps libcamera's headers one
+          # level down, in /usr/include/libcamera.
+          PRESET=cp0-native bash package_deb.sh -DCM0_SDK_ROOT=/ -DLIBCAMERA_INCLUDE_DIR=/usr/include/libcamera
           deb=$(find build -name 'Camera_*_arm64.deb' | head -1)
           test -n "$deb"
           dpkg-deb -I "$deb" | tee -a /tmp/notes.md
