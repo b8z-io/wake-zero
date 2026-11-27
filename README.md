@@ -110,11 +110,15 @@ If the picture is sideways, add `--rotate 90` (or `270`) to `Exec=` in
   - Ink's fluid (stable fluids with vorticity, as in the browser) needs floating-point render targets, so it runs
     on the CPU instead, across all four cores with OpenMP (`src/ink.c`): 128x68 for the velocity and pressure,
     the full screen for the ink. The GPU only shades the result.
+- **`src/ndi.c`**: NDI output. The NDI library is opened at run time through its own loader
+  (`NDIlib_v6_load`), so Wake runs without it; frames go out as BGRX, scaled 2x, sent asynchronously while the
+  next one is drawn.
 
 ## Building and testing
 
 ```sh
 sudo apt install gcc make libegl-dev libgles-dev libgbm-dev     # on the device, or any Debian/Ubuntu
+tools/fetch_ndi_sdk.sh       # optional: NDI headers (git-ignored); without them Wake builds without NDI
 make
 ./wake --camera fake --scene 2 --out /tmp/frames --frames 300 --every 30   # headless: PPM frames
 tests/parity.sh                                                         # C analysis vs the JavaScript
