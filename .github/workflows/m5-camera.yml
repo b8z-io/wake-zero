@@ -19,8 +19,15 @@ jobs:
         run: |
           apt-get update -q
           apt-get install -y -q --no-install-recommends ca-certificates curl gnupg
-          curl -fsSL https://archive.raspberrypi.com/debian/raspberrypi.gpg.key | gpg --dearmor -o /usr/share/keyrings/raspberrypi.gpg
-          echo "deb [signed-by=/usr/share/keyrings/raspberrypi.gpg] http://archive.raspberrypi.com/debian trixie main" > /etc/apt/sources.list.d/raspi.list
+          # The key at raspberrypi.gpg.key has a SHA-1 binding, which trixie's apt now rejects; the
+          # raspberrypi-archive-keyring package (what Pi OS itself uses) carries the current one.
+          pool=https://archive.raspberrypi.com/debian/pool/main/r/raspberrypi-archive-keyring
+          deb=$(curl -fsSL "$pool/" | grep -oE 'raspberrypi-archive-keyring_[^"<>]+_all\.deb' | sort -uV | tail -1)
+          echo "keyring: $deb"
+          curl -fsSLO "$pool/$deb" && dpkg -i "$deb"
+          ls /usr/share/keyrings/ | grep -i raspberry
+          key=$(ls /usr/share/keyrings/raspberrypi-archive-keyring.* | head -1)
+          echo "deb [signed-by=$key] https://archive.raspberrypi.com/debian trixie main" > /etc/apt/sources.list.d/raspi.list
           apt-get update -q
 
       - name: Build dependencies
