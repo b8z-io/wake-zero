@@ -10,6 +10,9 @@ each frame is reduced to 128x72 greyscale, then to blurred brightness, motion an
 fields drive the art. It's a native port of Wake, a browser piece (try it with your webcam at
 [wake.batesyboy.com](https://wake.batesyboy.com); nothing leaves your browser), to OpenGL ES 2.0 on a GPU from 2012.
 
+Built with [Claude](https://claude.ai) (Anthropic's AI): I came up with it, directed it and tested it on the
+hardware; Claude wrote most of the code.
+
 ## Scenes
 
 | Key | Scene | |
