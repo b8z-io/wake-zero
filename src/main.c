@@ -3,7 +3,10 @@
 //
 //   wake [--camera rpicam|fake|off] [--mirror] [--flip|--no-flip] [--fb /dev/fb_lcd] [--rotate 0|90|180|270]
 //        [--swap] [--kbd DEVICE] [--fps 30] [--scene N] [--stream URL [--stream-scale N]]
-//        [--out DIR --frames N [--every K]]
+//        [--record] [--tour SECONDS] [--out DIR --frames N [--every K]]
+//
+// --tour 10 shows every scene once for 10 s each, snapshots each one (PNG) and quits; with --record it also
+// records the whole tour as one MP4. Made for docs and posts.
 //
 // Keys: space / enter / right (or /) next scene, left (or ,) previous, 1-6 pick one, P palette, A auto,
 // D fields + frame rate, M mirror, F flip the camera 180, S snapshot (PNG), V record (MP4), C camera on/off,
@@ -35,7 +38,7 @@
 #define H 170
 #define AUTO_S 90.0f
 #define FADE_S 2.5f
-#define VERSION "0.3.1"
+#define VERSION "0.4.0"
 
 typedef struct { const char *name; float a[3], b[3], c[3], d[3]; } Palette;
 static const Palette PALETTES[] = {
@@ -60,6 +63,7 @@ static double now_s(void) {
 
 // ------------------------------------------------------------------------------------------------ settings
 static char conf_path[512];
+static int no_save;
 static void load_settings(void) {
   const char *home = getenv("HOME");
   snprintf(conf_path, sizeof conf_path, "%s/.config/wake-cardputer", home ? home : "/tmp");
@@ -73,6 +77,7 @@ static void load_settings(void) {
   S.palette = ((S.palette % NPAL) + NPAL) % NPAL;
 }
 static void save_settings(void) {
+  if (no_save) return;
   const char *home = getenv("HOME");
   char dir[512];
   snprintf(dir, sizeof dir, "%s/.config", home ? home : "/tmp");
@@ -191,13 +196,16 @@ static void write_ppm(const char *dir, int n, const unsigned char *rgba) {
 static void usage(void) {
   fprintf(stderr, "usage: wake [--camera rpicam|fake|off] [--mirror] [--flip|--no-flip] [--fb PATH] [--rotate 0|90|180|270]\n"
                   "            [--swap] [--kbd DEVICE] [--fps N] [--scene N] [--stream URL [--stream-scale N]]\n"
-                  "            [--out DIR --frames N [--every K]]\n"
+                  "            [--record] [--tour SECONDS] [--out DIR --frames N [--every K]]\n"
+                  "  --tour 10 --record               every scene for 10 s: one MP4 plus a PNG of each, then quit\n"
                   "  --stream udp://<computer>:5000  live H.264 (MPEG-TS) for VLC, OBS, TouchDesigner, ...\n");
 }
 
 int main(int argc, char **argv) {
   const char *cam_mode = "rpicam", *fb_path = "/dev/fb_lcd", *kbd_path = NULL, *out_dir = NULL;
   const char *stream_url = NULL;
+  float tour = 0;
+  int record_arg = 0;
   int rotate = -1, swap = 0, fps = 30, frames_max = 0, every = 1, scene_arg = -1, mirror_arg = -1, flip_arg = -1, stream_scale = 1;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
@@ -207,6 +215,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--no-flip")) flip_arg = 0;
     else if (!strcmp(a, "--stream") && v) stream_url = argv[++i];
     else if (!strcmp(a, "--stream-scale") && v) stream_scale = atoi(argv[++i]);
+    else if (!strcmp(a, "--tour") && v) tour = atof(argv[++i]);
+    else if (!strcmp(a, "--record")) record_arg = 1;
     else if (!strcmp(a, "--fb") && v) fb_path = argv[++i];
     else if (!strcmp(a, "--rotate") && v) rotate = atoi(argv[++i]);
     else if (!strcmp(a, "--swap")) swap = 1;
@@ -230,6 +240,11 @@ int main(int argc, char **argv) {
   if (scene_arg >= 0) S.scene = scene_arg % NSCENES;
   if (mirror_arg >= 0) S.mirror = mirror_arg;
   if (flip_arg >= 0) S.flip = flip_arg;
+  if (tour > 0) {   // every scene once, from the first, without touching the saved settings
+    if (tour < 5) tour = 5;
+    S.scene = 0; S.autocycle = 1; no_save = 1;
+  }
+  const float auto_s = tour > 0 ? tour : AUTO_S;
 
   Display disp;
   const int headless = out_dir != NULL;
@@ -264,6 +279,11 @@ int main(int argc, char **argv) {
     if (enc_stream(&live, W, H, fps, stream_url, stream_scale)) fprintf(stderr, "wake: streaming to %s\n", stream_url);
     else fprintf(stderr, "wake: couldn't start ffmpeg for the stream\n");
   }
+  if (record_arg) {
+    if (enc_record(&rec, W, H, fps, path, sizeof path)) fprintf(stderr, "wake: recording to %s\n", path);
+    else fprintf(stderr, "wake: couldn't start ffmpeg to record\n");
+  }
+  int tour_snapped = -1;
 
   Analyzer *an = an_new(CAM_W, CAM_H);
   Camera *cam = cam_open(cam_mode);
@@ -331,7 +351,11 @@ int main(int argc, char **argv) {
         case KEY_Q: case KEY_ESC: running = 0; break;
       }
     }
-    if (S.autocycle && sceneT > AUTO_S && fade >= 1) go = cur + 1;
+    if (S.autocycle && sceneT > auto_s && fade >= 1) {
+      if (tour > 0 && cur == NSCENES - 1) running = 0;   // the tour is over
+      else go = cur + 1;
+    }
+    if (tour > 0 && tour_snapped != cur && sceneT > auto_s * 0.7f) { snap = 1; tour_snapped = cur; }
     if (go != INT_MIN) {
       go = ((go % NSCENES) + NSCENES) % NSCENES;
       if (go != cur) {
@@ -372,7 +396,10 @@ int main(int argc, char **argv) {
     // Out to files and the network: the clean picture, before any labels go on.
     if (snap) {
       snap = 0;
-      if (capture_snapshot(rgba, W, H, path, sizeof path)) { fprintf(stderr, "wake: snapshot %s\n", path); snprintf(flash, sizeof flash, "snapshot"); }
+      char tag[32];
+      snprintf(tag, sizeof tag, "%d-%s", cur + 1, SCENES[cur].title);
+      for (char *c = tag; *c; c++) if (*c >= 'A' && *c <= 'Z') *c += 32;
+      if (capture_snapshot(rgba, W, H, tag, path, sizeof path)) { fprintf(stderr, "wake: snapshot %s\n", path); snprintf(flash, sizeof flash, "snapshot"); }
       else snprintf(flash, sizeof flash, "can't save");
       flash_until = t + 1.5;
     }

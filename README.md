@@ -5,7 +5,8 @@ credit-card-sized Linux computer (Raspberry Pi CM0, VideoCore IV GPU, 320x170 sc
 
 Point it at someone and the art is the wake they leave as they move. The camera picture is never shown or stored:
 each frame is reduced to 128x72 greyscale, then to blurred brightness, motion and optical flow, and only those
-fields drive the art. It's a native port of Wake, a browser piece, to OpenGL ES 2.0 on a GPU from 2012.
+fields drive the art. It's a native port of Wake, a browser piece (try it with your webcam at
+[wake.batesyboy.com](https://wake.batesyboy.com); nothing leaves your browser), to OpenGL ES 2.0 on a GPU from 2012.
 
 ## Scenes
 
@@ -37,6 +38,10 @@ on-screen labels.
   add it to OBS as a Media Source (untick *Local File*, input `udp://@:5000`), or use TouchDesigner's
   *Video Stream In*. `--stream-scale 2` enlarges it on the device first (more CPU). The camera faces away from
   the screen, so this is also how you watch yourself: point it at you and watch the stream.
+
+**A tour for docs and posts:** `wake --tour 12 --record` shows every scene once for 12 seconds, records the whole
+run as one MP4, saves a PNG of each scene and quits (your saved settings are left alone). Move about in front of
+the camera while it runs: the art is made from movement.
 
 To stream whenever it starts from the launcher, add the option to `Exec=` in
 `/usr/share/APPLaunch/applications/wake.desktop`.
@@ -88,3 +93,10 @@ tests/parity.sh                                                         # C anal
 ```
 
 CI runs both, builds the arm64 binary on Debian trixie and publishes it as the `latest` release.
+
+## Support
+
+Wake Zero is free and open. If it made you smile, you can
+[buy me a coffee](https://buymeacoffee.com/batesyboy) or [sponsor me on GitHub](https://github.com/sponsors/b8z-io).
+More of what I make: [socials.batesyboy.com](https://socials.batesyboy.com).
+

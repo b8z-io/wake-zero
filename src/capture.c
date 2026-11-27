@@ -21,7 +21,7 @@ static void stamp(char *out, size_t n) {
   strftime(out, n, "%Y%m%d-%H%M%S", localtime(&t));
 }
 
-int capture_snapshot(const unsigned char *rgba, int w, int h, char *path_out, size_t n) {
+int capture_snapshot(const unsigned char *rgba, int w, int h, const char *tag, char *path_out, size_t n) {
   char dir[300], ts[32], ppm[400];
   dir_for(dir, sizeof dir, "Pictures");
   stamp(ts, sizeof ts);
@@ -34,7 +34,8 @@ int capture_snapshot(const unsigned char *rgba, int w, int h, char *path_out, si
   fclose(f);
   // Scaled up 4x with hard pixel edges, so it reads as the screen it came from. In the background, so the art
   // doesn't stall while it converts.
-  snprintf(path_out, n, "%s/wake-%s.png", dir, ts);
+  if (tag) snprintf(path_out, n, "%s/wake-%s-%s.png", dir, ts, tag);
+  else snprintf(path_out, n, "%s/wake-%s.png", dir, ts);
   char cmd[1200];
   snprintf(cmd, sizeof cmd, "(ffmpeg -hide_banner -loglevel error -y -i '%s' -vf scale=iw*4:ih*4:flags=neighbor '%s'; rm -f '%s') >/dev/null 2>&1 &",
            ppm, path_out, ppm);
