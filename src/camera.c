@@ -96,16 +96,30 @@ static inline int dest(int x, int y, int orient) {
   return (fy ? CAM_H - 1 - y : y) * CAM_W + (fx ? CAM_W - 1 - x : x);
 }
 
+static inline float blob(float x, float y, float cx, float cy, float rx, float ry) {
+  const float a = (x - cx) / rx, b = (y - cy) / ry;
+  return expf(-(a * a + b * b));
+}
+
+// A synthetic room with someone in it: a lit wall, a head and body that wander across, two arms that wave at
+// different speeds (one now and then sweeping wide) and a lamp that flickers. For tests and renders without a
+// camera; the analysis sees it the same way it sees a real one.
 static void fake_frame(Camera *c, float *g, int orient) {
   const float t = c->fake_t;
   c->fake_t += 1.0f / 30;
-  const float cx = 30 + 60 * (0.5f - 0.5f * cosf(t * 0.6f)), cy = 40;
-  const float ax = cx + 18 + 10 * sinf(t * 5), ay = 24 + 6 * cosf(t * 5);
+  const float cx = 64 + 34 * sinf(t * 0.31f) + 10 * sinf(t * 1.3f), cy = 44 + 4 * sinf(t * 2.6f);
+  const float sweep = 0.65f + 0.35f * sinf(t * 0.37f);                       // how big the waves are
+  const float la = t * 4.7f, ra = t * 3.9f + 1.3f;
+  const float lx = cx - 18 - 18 * sweep * cosf(la), ly = cy - 18 - 16 * sweep * sinf(la);
+  const float rx = cx + 18 + 20 * sweep * cosf(ra), ry = cy - 16 - 18 * sweep * sinf(ra);
+  const float lamp = 0.5f + 0.5f * sinf(t * 7.3f) * sinf(t * 2.1f);
   for (int y = 0; y < CAM_H; y++)
     for (int x = 0; x < CAM_W; x++) {
-      const float room = 0.35f + 0.15f * x / CAM_W + 0.05f * sinf(y / 9.0f);
-      const float bx = (x - cx) / 14, by = (y - cy) / 22, rx = (x - ax) / 5, ry = (y - ay) / 5;
-      float v = room + 0.45f * expf(-(bx * bx + by * by)) + 0.4f * expf(-(rx * rx + ry * ry)) + 0.03f * sinf(t * 9);
+      float v = 0.3f + 0.18f * x / CAM_W + 0.04f * sinf(y / 9.0f) + 0.12f * lamp * blob(x, y, 112, 10, 9, 9);
+      v += 0.42f * blob(x, y, cx, cy - 22, 7, 8.5f);                           // head
+      v += 0.36f * blob(x, y, cx, cy + 6, 15, 22);                             // body
+      v += 0.45f * (blob(x, y, (cx - 9 + lx) / 2, (cy - 10 + ly) / 2, 7, 7) + blob(x, y, lx, ly, 7, 7));   // left arm
+      v += 0.45f * (blob(x, y, (cx + 9 + rx) / 2, (cy - 10 + ry) / 2, 7, 7) + blob(x, y, rx, ry, 7, 7));   // right arm
       v += ((rand() & 255) / 255.0f - 0.5f) * 0.02f;
       g[dest(x, y, orient)] = v < 0 ? 0 : v > 1 ? 1 : v;
     }

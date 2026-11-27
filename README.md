@@ -1,5 +1,7 @@
 # Wake Zero
 
+![Wake Zero's six scenes](docs/media/hero.webp)
+
 Abstract art from a camera, on the [M5Stack CardputerZero](https://docs.m5stack.com/en/CardputerZero): a
 credit-card-sized Linux computer (Raspberry Pi CM0, VideoCore IV GPU, 320x170 screen, 8 MP camera).
 
@@ -18,6 +20,15 @@ fields drive the art. It's a native port of Wake, a browser piece (try it with y
 | 4 | **Ripple** | A water surface. Movement presses in and leaves a wake; raindrops fall; caustics shimmer. |
 | 5 | **Echo** | Video feedback. Movement pours light into an endless spiralling tunnel. |
 | 6 | **Thermal** | A heat camera. You glow in false colour and leave a warm haze that drifts up as it cools. |
+
+| | |
+|---|---|
+| ![Ink](docs/media/ink.png) | ![Strata](docs/media/strata.png) |
+| ![Lattice](docs/media/lattice.png) | ![Ripple](docs/media/ripple.png) |
+| ![Echo](docs/media/echo.png) | ![Thermal](docs/media/thermal.png) |
+
+*Rendered by Wake Zero's own code headlessly, with its built-in simulated camera (`--camera fake`: a figure
+waving its arms) in place of a person; on the device the input is you.*
 
 **Space** / **Enter** / **→** next scene · **←** previous · **1–6** pick one · **P** palette · **A** auto-cycle
 (every 90 s) · **F** flip the camera 180° (on by default: the CardputerZero's camera is mounted upside down) ·
